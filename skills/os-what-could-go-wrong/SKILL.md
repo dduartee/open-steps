@@ -12,6 +12,7 @@ description: >-
   this.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Bash(bash ${CLAUDE_SKILL_DIR}/scripts/prompt.sh)"
 ---
 
@@ -141,10 +142,9 @@ The reasoning behind these is in [`references/why-these-rules.md`](references/wh
 
 ## The analysis prompt, verbatim
 
-The block below is the whole of
-[`references/premortem-prompt.md`](references/premortem-prompt.md), inlined
-when this skill loads through `scripts/prompt.sh`, so no file has to be read
-at dispatch time. If it shows a literal command instead, your tool does not
-run inline commands: open that file next to this one and use its full text.
+The block below is the whole of [`references/premortem-prompt.md`](references/premortem-prompt.md),
+inlined so no file has to be read at dispatch time. If it shows a literal
+command instead, your tool does not run inline commands: open that file next to
+this one and use its full text.
 
 !`bash ${CLAUDE_SKILL_DIR}/scripts/prompt.sh`

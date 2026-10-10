@@ -12,6 +12,7 @@ description: >-
   first.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
 ---
 
 # os-say-simple

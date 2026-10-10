@@ -121,8 +121,8 @@ skills use:
 
 | Skill | Pre-approved on Claude Code |
 |---|---|
-| Every skill | Reading its reports folder, `~/.claude/open-steps/` |
-| `os-done-or-not` | Writing its report in that folder, and `gh pr view` and `gh pr checks` |
+| Every skill | Reading its reports folder: `~/.claude/open-steps/` and `~/.local/share/open-steps/`. A folder you chose yourself with `OPEN_STEPS_REPORTS` or a `.open-steps` file is not covered — this field is a glob, not a resolved path, so Claude Code asks once for those |
+| `os-done-or-not` | Writing its report in those two folders, and `gh pr view` and `gh pr checks` |
 | `os-whats-next`, `os-check-work` | `gh pr list`, `gh pr view`, `gh pr checks` and `gh pr diff`, which read a pull request, and `gh pr merge`, for the merges above |
 | `os-big-picture` | Editing its own `BIG-PICTURE.md`, its census script, `git rev-parse --git-dir` to find the repository folder, `gh repo view`, `gh issue list`, and `gh issue create`, which opens tickets after you say yes |
 | `os-what-could-go-wrong` | Its premortem prompt script |
@@ -342,11 +342,43 @@ below. Their settings:
 | `OPEN_STEPS_DISABLE` | unset | set to anything to switch the stop hook off |
 | `OPEN_STEPS_MAX_REPORT_LINES` | 80 | cap on the last report the start hook shows |
 | `OPEN_STEPS_NO_SESSION_START` | unset | set to anything to switch the start hook off |
+| `OPEN_STEPS_REPORTS` | unset | the one folder your reports go in, beating every other choice. `~` is expanded |
 
-Reports are saved outside your repositories, in
-`~/.claude/open-steps/reports/<project>/`. So they stay out of your commits
+`OPEN_STEPS_REPORTS` is for your machine. A project says where its own reports
+go with a `.open-steps` file at its repository root, which travels with the
+clone:
+
+```
+reports = ~/Documents/00-materiais/relatorios
+```
+
+The variable wins over that file. A cloned `.open-steps` can move every report
+on the machine, so read the one in the repository before you trust it.
+
+Reports are saved outside your repositories, so they stay out of your commits
 and survive uninstalling the pack. Each tool is pointed at this one folder, so
-all your tools share one history. The `.claude` in the path is only a name.
+all your tools share one history. The folder is resolved, not fixed — the first
+of these that applies wins:
+
+1. `OPEN_STEPS_REPORTS`, an explicit override that beats everything else.
+2. A `.open-steps` file at the root of the repository, so the project answers
+   for itself and can commit the answer:
+   ```
+   reports = ~/Documents/00-materiais/relatorios
+   ```
+   `~` is expanded and a relative value is resolved against the repository
+   root.
+3. `~/.claude/open-steps/reports/`, but only while it holds reports, so that
+   upgrading the pack does not orphan the ones you already wrote. There is no
+   migration: move them yourself, or set `OPEN_STEPS_REPORTS` and move them.
+4. `$XDG_DATA_HOME/open-steps/reports/`, which is
+   `~/.local/share/open-steps/reports/` when `XDG_DATA_HOME` is unset. A
+   relative `XDG_DATA_HOME` is refused, because resolving it against whatever
+   directory the agent happened to be in would put the reports inside a project.
+
+Run `bash doctor.sh` to see which one you got. The session start hook prints the
+resolved folder on every session, which is how a skill knows the path without
+naming one.
 
 ### Three decisions
 

@@ -82,11 +82,31 @@ os_fingerprint() { # sets OS_FINGERPRINT, OS_HEADS, OS_DIRTY, OS_CHANGED
 #
 # Layer 3 only applies when the folder has reports in it. Without that test a
 # fresh install would adopt an empty leftover directory and ignore XDG forever.
+# Every layer ends up absolute: os_expand_path resolves `~` and relative values,
+# and a relative XDG_DATA_HOME is refused rather than silently anchored to the
+# directory the hook happened to run in.
 # The path is printed once per session by session-start.sh, so a skill never
 # has to know how it was resolved.
+# A configured path is written by a human, so it arrives written for a shell:
+# `~/relatorios`, or `reports` meaning "next to the project". File contents get
+# no word splitting and no tilde expansion, so those two would otherwise become
+# a directory literally named `~` inside the repository, or a reports folder
+# committed with the project. Both are normalized here.
+os_expand_path() {
+  local p="$1" base="$2"
+  case "$p" in
+    '~')   p="$HOME" ;;
+    '~/'*) p="$HOME/${p#\~/}" ;;
+  esac
+  case "$p" in
+    /*) printf '%s\n' "$p" ;;
+    *)  printf '%s\n' "${base%/}/$p" ;;
+  esac
+}
+
 os_reports_root() {
   if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
-    printf '%s\n' "$OPEN_STEPS_REPORTS"
+    os_expand_path "$OPEN_STEPS_REPORTS" "$HOME"
     return 0
   fi
 
@@ -100,10 +120,8 @@ os_reports_root() {
     configured="${configured%\"}"; configured="${configured#\"}"
     configured="${configured%\'}"; configured="${configured#\'}"
     if [ -n "$configured" ]; then
-      case "$configured" in
-        /*) printf '%s\n' "$configured" ; return 0 ;;
-        *)  printf '%s/%s\n' "$root" "$configured" ; return 0 ;;
-      esac
+      os_expand_path "$configured" "$root"
+      return 0
     fi
   fi
 
@@ -113,7 +131,14 @@ os_reports_root() {
     return 0
   fi
 
-  printf '%s/open-steps/reports\n' "${XDG_DATA_HOME:-$HOME/.local/share}"
+  # XDG_DATA_HOME set to a relative path is a common mistake, and resolving it
+  # against whatever directory the hook happened to run in puts the reports
+  # inside the project and moves them whenever the agent changes directory.
+  # An absolute check keeps the promise that this path never depends on cwd.
+  case "${XDG_DATA_HOME:-$HOME/.local/share}" in
+    /*) printf '%s/open-steps/reports\n' "${XDG_DATA_HOME:-$HOME/.local/share}" ;;
+    *)  printf '%s/.local/share/open-steps/reports\n' "$HOME" ;;
+  esac
 }
 
 os_state_paths() { # sets OS_STATE_DIR, OS_REPORT_FILE, OS_STATE_FILE

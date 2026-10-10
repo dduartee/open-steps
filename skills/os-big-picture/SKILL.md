@@ -13,6 +13,7 @@ description: >-
   never before. Never invents work, never deletes code.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Edit(BIG-PICTURE.md)"
   - "Bash(bash ${CLAUDE_SKILL_DIR}/scripts/census.sh *)"
   - "Bash(git rev-parse --git-dir)"

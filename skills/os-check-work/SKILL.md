@@ -10,6 +10,7 @@ description: >-
   next step, and any reply another session needs, ready to paste.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Bash(gh pr list *)"
   - "Bash(gh pr view *)"
   - "Bash(gh pr checks *)"

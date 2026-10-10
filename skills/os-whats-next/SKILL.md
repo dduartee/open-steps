@@ -12,6 +12,7 @@ description: >-
   plain words - what it closes or unblocks. Never invents tasks.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Bash(gh pr list *)"
   - "Bash(gh pr view *)"
   - "Bash(gh pr checks *)"

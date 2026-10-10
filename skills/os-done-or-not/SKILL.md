@@ -11,7 +11,9 @@ description: >-
   starts from it instead of re-exploring the repo.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Edit(~/.claude/open-steps/**)"
+  - "Edit(~/.local/share/open-steps/**)"
   - "Bash(gh pr view *)"
   - "Bash(gh pr checks *)"
   - "Bash(gh pr checks)"

@@ -57,8 +57,8 @@ What we are assuming: every gap nobody could close, written as an assumption
 
 Close the gaps in this order, and stop as soon as a gap is closed.
 
-1. **Look it up yourself.** Documents, data, the repository, the last report
-   in `~/.claude/open-steps/reports/`, what went wrong last time.
+1. **Look it up yourself.** Documents, data, the repository, the last report in
+   the reports folder, what went wrong last time.
 2. **Ask, but earn the ask.** Only a gap where guessing wrong would change the
    verdict, one question at a time through `os-ask-simple`, three at most.
    Nobody there to answer, or an answer that would not move the verdict -> 3.

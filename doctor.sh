@@ -314,9 +314,10 @@ has_copy "$gem/skills" && gem_own=1
 # this pack's, and that test needs the installed copy.
 
 # A sign of Claude Code is its command, ~/.claude.json, or the files this
-# script reads for it below. A bare ~/.claude is not enough: the hooks write
-# their reports under ~/.claude/open-steps on every tool, so a Gemini CLI
-# machine grows one too.
+# script reads for it below. A bare ~/.claude is not enough: an install that
+# predates the resolved reports path can grow that folder from any tool, and
+# an OpenCode or Cursor machine that adopted the old ~/.claude reports folder
+# has one too. It is the contents that identify the harness, never the folder.
 CC=0
 command -v claude >/dev/null 2>&1 && CC=1
 for f in "$PLUGINS" "$HOME/.claude/settings.json" "$HOME/.claude/CLAUDE.md" \
@@ -576,6 +577,53 @@ else
   routing_block "$HOME/.claude/CLAUDE.md" 2 "Your Claude Code instructions file"
   unknown "Whether the agent obeys the block is not on disk. This only checked that the words are there."
 fi
+
+# --- where the reports go --------------------------------------------------
+section "Where the reports go"
+# The path is resolved, not fixed: OPEN_STEPS_REPORTS, then the project's
+# .open-steps file, then the legacy ~/.claude folder when it holds history,
+# then XDG. A wrong answer here is invisible until a report is written to
+# somewhere nobody reads, so each layer is named with what it resolved to.
+if [ -n "${OPEN_STEPS_REPORTS+x}" ]; then
+  if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+    ok "OPEN_STEPS_REPORTS is set, and the reports go to $OPEN_STEPS_REPORTS"
+  else
+    fault "OPEN_STEPS_REPORTS is set to something empty. The hooks would write to an empty path and fail silently." reports
+  fi
+else
+  fact "OPEN_STEPS_REPORTS is not set; the reports path comes from the layers below."
+fi
+if [ -f ".open-steps" ]; then
+  reports_cfg="$(sed -n 's/^[[:space:]]*reports[[:space:]]*=[[:space:]]*//p' .open-steps 2>/dev/null | head -1)"
+  if [ -n "$reports_cfg" ]; then
+    case "$reports_cfg" in
+      /*) reports_abs="$reports_cfg" ;;
+      *)  reports_abs="$PWD/$reports_cfg" ;;
+    esac
+    mkdir -p "$reports_abs" 2>/dev/null
+    if [ -d "$reports_abs" ]; then
+      ok ".open-steps sends the reports to $reports_abs"
+    else
+      fault ".open-steps names $reports_cfg, which is not a directory this user can create. Reports would fail to save." reports
+    fi
+  else
+    fact ".open-steps has no reports= line, so the default applies."
+  fi
+else
+  unknown "There is no .open-steps in this repository, so the reports path is the default."
+fi
+if [ -d "$HOME/.claude/open-steps/reports" ] && [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+  fault "The legacy ~/.claude reports folder holds history and OPEN_STEPS_REPORTS is set too. The variable wins, so the old reports are left behind. Move them yourself, or unset the variable." reports
+elif [ -d "$HOME/.claude/open-steps/reports" ]; then
+  fact "The legacy ~/.claude reports folder holds history and is still in use. That keeps your past reports reachable."
+fi
+# The resolved path, asked of the same resolver the hooks use, so this line
+# cannot drift from what they will actually do.
+reports_resolved="$(
+  . "$PACK/hooks/fingerprint.sh" 2>/dev/null
+  os_reports_root "$PWD" 2>/dev/null
+)"
+fact "Reports resolve to: ${reports_resolved:-unknown}"
 
 # --- the hooks ------------------------------------------------------------
 section "Claude Code: the hooks"

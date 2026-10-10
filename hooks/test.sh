@@ -162,7 +162,16 @@ case "$out" in
   *) check "the handover arrives as hookSpecificOutput.additionalContext" 0 1 ;;
 esac
 [ "$(printf '%s' "$out" | wc -l | tr -d ' ')" = "0" ]; check "on one line, newlines escaped" 0 $?
-grep -q '^OS_STATE_SESSION=G11$' "$H/.claude/open-steps/reports/$(basename "$PWD")/.stop-state"
+# The state file follows the resolved reports root, which is not a fixed path:
+# OPEN_STEPS_REPORTS, then the project's .open-steps file, then the legacy
+# ~/.claude location when it holds history, then XDG. This case sets no
+# environment and creates no legacy folder, so XDG is where it lands. The
+# assertion asks the pack's own resolver rather than repeating a path, so it
+# keeps holding if the order of those layers ever changes.
+state="$(printf '{"session_id":"x"}' | HOME="$H" bash -c '
+  . "$0/hooks/fingerprint.sh"; os_find_repos; os_state_paths; printf "%s" "$OS_STATE_FILE"' \
+  "$PACK" 2>/dev/null)"
+grep -q '^OS_STATE_SESSION=G11$' "$state"
 check "the baseline is keyed on the session id Gemini sent" 0 $?
 gafter="$(printf '{"session_id":"G11","transcript_path":"%s/t.json","cwd":"%s","hook_event_name":"AfterAgent","timestamp":"2026-01-01T00:01:00Z","prompt":"append a line","prompt_response":"Done.","stop_hook_active":false}' "$H" "$PWD")"
 out="$(printf '%s' "$gafter" | HOME="$H" GEMINI_PROJECT_DIR="$PWD" bash "$PACK/hooks/adapter.sh" gemini stop 2>/dev/null)"
@@ -699,7 +708,11 @@ for bad in "x;touch $P/semicolon" "\$(touch $P/substitution)" "\`touch $P/backti
   start "$bad"; check "session start with a hostile id" 0 $?
   stop "$bad"; check "stop with a hostile id, nothing changed" 0 $?
 done
-state="$H/.claude/open-steps/reports/$(basename "$W")/.stop-state"
+# The resolved root, asked of the pack rather than repeated here, for the same
+# reason as the assertion in CASE 11.
+state="$(printf '{"session_id":"x"}' | HOME="$H" bash -c '
+  . "$0/hooks/fingerprint.sh"; os_find_repos; os_state_paths; printf "%s" "$OS_STATE_FILE"' \
+  "$PACK" 2>/dev/null)"
 grep -q '^OS_STATE_SESSION=nosession$' "$state"
 check "the id is replaced by the fallback" 0 $?
 printf 'OS_STATE_SESSION=x;touch %s/legacy\nOS_STATE_FIRED_AT=$(touch %s/legacy)\n' "$P" "$P" > "$state"

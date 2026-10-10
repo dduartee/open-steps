@@ -68,8 +68,58 @@ os_fingerprint() { # sets OS_FINGERPRINT, OS_HEADS, OS_DIRTY, OS_CHANGED
   OS_HEADS="$(printf '%s' "$parts" | grep -oE ':[0-9a-f]{40}:' | tr -d '\n')"
 }
 
-os_state_paths() { # sets OS_STATE_DIR, OS_STATE_FILE
-  OS_STATE_DIR="$HOME/.claude/open-steps/reports/${OS_SCOPE:-unknown}"
+# Where the reports live. No harness owns this path: the pack used to hardcode
+# ~/.claude/open-steps/reports, which was right on Claude Code and merely a
+# name everywhere else. Four layers, first match wins:
+#
+#   1. OPEN_STEPS_REPORTS   explicit override, wins over everything
+#   2. .open-steps in the   the project's own answer, committed with it
+#      repository root
+#   3. ~/.claude/open-steps/reports   a pack that already ran on this machine,
+#      read if it holds history, so an upgrade does not orphan past reports
+#   4. $XDG_DATA_HOME/open-steps/reports   the default, or ~/.local/share when
+#      XDG_DATA_HOME is unset
+#
+# Layer 3 only applies when the folder has reports in it. Without that test a
+# fresh install would adopt an empty leftover directory and ignore XDG forever.
+# The path is printed once per session by session-start.sh, so a skill never
+# has to know how it was resolved.
+os_reports_root() {
+  if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+    printf '%s\n' "$OPEN_STEPS_REPORTS"
+    return 0
+  fi
+
+  local repo_conf="$HOME/.claude/open-steps/reports"
+  local root="${1:-$PWD}"
+
+  if [ -n "$root" ] && [ -f "$root/.open-steps" ]; then
+    local configured
+    configured="$(sed -n 's/^[[:space:]]*reports[[:space:]]*=[[:space:]]*//p' \
+      "$root/.open-steps" 2>/dev/null | head -1)"
+    configured="${configured%\"}"; configured="${configured#\"}"
+    configured="${configured%\'}"; configured="${configured#\'}"
+    if [ -n "$configured" ]; then
+      case "$configured" in
+        /*) printf '%s\n' "$configured" ; return 0 ;;
+        *)  printf '%s/%s\n' "$root" "$configured" ; return 0 ;;
+      esac
+    fi
+  fi
+
+  # The old location, but only if it carries history worth keeping.
+  if [ -d "$repo_conf" ] && [ -n "$(ls -A "$repo_conf" 2>/dev/null)" ]; then
+    printf '%s\n' "$repo_conf"
+    return 0
+  fi
+
+  printf '%s/open-steps/reports\n' "${XDG_DATA_HOME:-$HOME/.local/share}"
+}
+
+os_state_paths() { # sets OS_STATE_DIR, OS_REPORT_FILE, OS_STATE_FILE
+  OS_REPORTS_ROOT="$(os_reports_root "${OS_REPOS[0]:-$PWD}")"
+  OS_STATE_DIR="$OS_REPORTS_ROOT/${OS_SCOPE:-unknown}"
+  OS_REPORT_FILE="$OS_STATE_DIR/latest.md"
   OS_STATE_FILE="$OS_STATE_DIR/.stop-state"
 }
 

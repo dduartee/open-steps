@@ -41,8 +41,11 @@ Triggers: the description above, plus a session just ended wanting a next move.
 
 Stop as soon as you can answer.
 
-1. **The last report** - `~/.claude/open-steps/reports/<project>/latest.md`:
-   a handover written for exactly this moment.
+1. **The last report** - the project's `latest.md` in the reports folder: a
+   handover written for exactly this moment. That folder is outside every
+   repository; the session startup prints its path, and this pack's own
+   `.open-steps` file or `OPEN_STEPS_REPORTS` decides where it is, so never
+   assume a path. When no session startup ran, ask for it.
 2. **Local state** - uncommitted changes, unpushed commits, current branch.
 3. **Open pull requests** - one call:
    `gh pr list --json number,title,mergeStateStatus,reviewDecision,isDraft`.

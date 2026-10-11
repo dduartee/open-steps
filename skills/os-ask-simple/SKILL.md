@@ -14,6 +14,7 @@ description: >-
   over-engineering, easy to undo. Doing nothing is always weighed.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
 ---
 
 # os-ask-simple

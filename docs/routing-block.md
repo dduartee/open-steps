@@ -16,8 +16,10 @@ Invoke the skill. Do not improvise the answer in its place.
 Never offer me options without naming a recommendation, and never recommend
 something you have not screened for future cost.
 
-Reports live in `~/.claude/open-steps/reports/<project>/`. Read `latest.md`
-before re-exploring a repository you have worked in before.
+Reports live outside your repository, in the reports folder. The session
+startup prints its path; when a session has not printed one, ask for it rather
+than assuming one. Read that project's `latest.md` before re-exploring a
+repository you have worked in before.
 
 The standing picture of the product lives in `BIG-PICTURE.md` in the project.
 Update it when a report is written; never invent a task in it.

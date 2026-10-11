@@ -77,6 +77,7 @@
 #   2  the routing block
 #   3  the hooks
 #   4  the kill switches
+#   5  where the reports go
 #   9  faults in more than one of those
 
 set -uo pipefail
@@ -105,6 +106,7 @@ area_name() {
     2) printf 'the routing block' ;;
     3) printf 'the hooks' ;;
     4) printf 'the kill switches' ;;
+    5) printf 'where the reports go' ;;
     *) printf 'something unnamed' ;;
   esac
 }
@@ -314,9 +316,10 @@ has_copy "$gem/skills" && gem_own=1
 # this pack's, and that test needs the installed copy.
 
 # A sign of Claude Code is its command, ~/.claude.json, or the files this
-# script reads for it below. A bare ~/.claude is not enough: the hooks write
-# their reports under ~/.claude/open-steps on every tool, so a Gemini CLI
-# machine grows one too.
+# script reads for it below. A bare ~/.claude is not enough: an install that
+# predates the resolved reports path can grow that folder from any tool, and
+# an OpenCode or Cursor machine that adopted the old ~/.claude reports folder
+# has one too. It is the contents that identify the harness, never the folder.
 CC=0
 command -v claude >/dev/null 2>&1 && CC=1
 for f in "$PLUGINS" "$HOME/.claude/settings.json" "$HOME/.claude/CLAUDE.md" \
@@ -576,6 +579,91 @@ else
   routing_block "$HOME/.claude/CLAUDE.md" 2 "Your Claude Code instructions file"
   unknown "Whether the agent obeys the block is not on disk. This only checked that the words are there."
 fi
+
+# --- where the reports go --------------------------------------------------
+section "Where the reports go"
+# Whether the hooks could create a reports folder at this path. The naive
+# test -- is the directory writable -- is wrong in both directions: a folder
+# that does not exist yet reads unwritable, and a writable /proc makes
+# something under it pass. So this walks up to the nearest ancestor that
+# exists and tries to create a real entry there, which is the only thing that
+# answers the question. The entry is a directory made and removed in the same
+# breath, and nothing is left behind.
+can_create() {
+  local dir="${1:-}" prev="" probe
+  while [ -n "$dir" ] && [ "$dir" != "/" ] && [ ! -e "$dir" ] && [ "$dir" != "$prev" ]; do
+    prev="$dir"; dir="$(dirname "$dir")"
+  done
+  [ -d "$dir" ] || return 1
+  probe="$(mktemp -d "$dir/.open-steps-probe.XXXXXX" 2>/dev/null)" || return 1
+  rmdir "$probe" 2>/dev/null
+  return 0
+}
+# The path is resolved, not fixed: OPEN_STEPS_REPORTS, then the project's
+# .open-steps file, then the legacy ~/.claude folder when it holds history,
+# then XDG. A wrong answer here is invisible until a report is written to
+# somewhere nobody reads, so each layer is named with what it resolved to.
+if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+  reports_env="$(. "$PACK/hooks/fingerprint.sh" 2>/dev/null; os_expand_path "$OPEN_STEPS_REPORTS" "$HOME" 2>/dev/null)"
+  if [ -d "$reports_env" ]; then
+    ok "OPEN_STEPS_REPORTS is set, and the reports go to $reports_env"
+  elif can_create "$reports_env"; then
+    ok "OPEN_STEPS_REPORTS is set to $reports_env (not created yet; the hooks will make it)"
+  else
+    fault "OPEN_STEPS_REPORTS is set to $reports_env, which this user cannot write to. Every report would be lost without a word." 5
+  fi
+elif [ -n "${OPEN_STEPS_REPORTS+x}" ]; then
+  # The resolver treats an empty value as unset, and so must this line. Calling
+  # it a fault sent the reader hunting for a silent failure that cannot happen.
+  fact "OPEN_STEPS_REPORTS is set but empty. The resolver ignores it, the same as if you had never set it."
+else
+  fact "OPEN_STEPS_REPORTS is not set; the reports path comes from the layers below."
+fi
+if [ -f ".open-steps" ]; then
+  reports_cfg="$(sed -n 's/^[[:space:]]*reports[[:space:]]*=[[:space:]]*//p' .open-steps 2>/dev/null | head -1)"
+  if [ -n "$reports_cfg" ]; then
+    # Asked of the pack's own expander, so a `~` or a relative value is judged
+    # where the hooks will really write and not where they would naively land.
+    reports_abs="$(. "$PACK/hooks/fingerprint.sh" 2>/dev/null; os_expand_path "$reports_cfg" "$PWD" 2>/dev/null)"
+    # Writability is tested in a temporary name beside the target, then
+    # removed. mkdir -p on the real path would leave behind the very directory
+    # this script promises it does not create.
+    if [ -d "$reports_abs" ]; then
+      ok ".open-steps sends the reports to $reports_abs"
+    elif can_create "$reports_abs"; then
+      ok ".open-steps sends the reports to $reports_abs (not created yet; the hooks will make it)"
+    else
+      fault ".open-steps names $reports_cfg, which resolves to $reports_abs, a path this user cannot write to. Reports would fail to save." 5
+    fi
+  else
+    fact ".open-steps has no reports= line, so the default applies."
+  fi
+else
+  unknown "There is no .open-steps in this repository, so the reports path is the default."
+fi
+# The legacy folder only counts as history when it holds something. The
+# resolver tests that too, so a leftover empty directory must not be reported
+# as one: doing so made this section contradict the line below it.
+legacy_reports="$HOME/.claude/open-steps/reports"
+if [ -d "$legacy_reports" ] && [ -n "$(ls -A "$legacy_reports" 2>/dev/null)" ]; then
+  if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+    fault "The legacy ~/.claude reports folder holds history and OPEN_STEPS_REPORTS is set too. The variable wins, so the old reports are left behind. Move them yourself, or unset the variable." 5
+  else
+    fact "The legacy ~/.claude reports folder holds history and is still in use. That keeps your past reports reachable."
+  fi
+elif [ -d "$legacy_reports" ]; then
+  fact "The legacy ~/.claude reports folder is empty, so it is ignored and the reports follow the layers above."
+fi
+# The resolved path, asked of the same resolver the hooks use, with the same
+# argument they pass. Handing os_reports_root "$PWD" here made this line drift:
+# from a subdirectory the hooks read the repository root, the doctor read the
+# subdirectory, and the two disagreed about where the reports go.
+reports_resolved="$(
+  . "$PACK/hooks/fingerprint.sh" 2>/dev/null
+  os_find_repos 2>/dev/null
+  os_reports_root "${OS_REPOS[0]:-$PWD}" 2>/dev/null
+)"
+fact "Reports resolve to: ${reports_resolved:-unknown}"
 
 # --- the hooks ------------------------------------------------------------
 section "Claude Code: the hooks"

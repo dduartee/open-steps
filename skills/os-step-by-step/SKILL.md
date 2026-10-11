@@ -14,6 +14,7 @@ description: >-
   their step.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
 ---
 
 # os-step-by-step

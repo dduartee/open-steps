@@ -68,8 +68,83 @@ os_fingerprint() { # sets OS_FINGERPRINT, OS_HEADS, OS_DIRTY, OS_CHANGED
   OS_HEADS="$(printf '%s' "$parts" | grep -oE ':[0-9a-f]{40}:' | tr -d '\n')"
 }
 
-os_state_paths() { # sets OS_STATE_DIR, OS_STATE_FILE
-  OS_STATE_DIR="$HOME/.claude/open-steps/reports/${OS_SCOPE:-unknown}"
+# Where the reports live. No harness owns this path: the pack used to hardcode
+# ~/.claude/open-steps/reports, which was right on Claude Code and merely a
+# name everywhere else. Four layers, first match wins:
+#
+#   1. OPEN_STEPS_REPORTS   explicit override, wins over everything
+#   2. .open-steps in the   the project's own answer, committed with it
+#      repository root
+#   3. ~/.claude/open-steps/reports   a pack that already ran on this machine,
+#      read if it holds history, so an upgrade does not orphan past reports
+#   4. $XDG_DATA_HOME/open-steps/reports   the default, or ~/.local/share when
+#      XDG_DATA_HOME is unset
+#
+# Layer 3 only applies when the folder has reports in it. Without that test a
+# fresh install would adopt an empty leftover directory and ignore XDG forever.
+# Every layer ends up absolute: os_expand_path resolves `~` and relative values,
+# and a relative XDG_DATA_HOME is refused rather than silently anchored to the
+# directory the hook happened to run in.
+# The path is printed once per session by session-start.sh, so a skill never
+# has to know how it was resolved.
+# A configured path is written by a human, so it arrives written for a shell:
+# `~/relatorios`, or `reports` meaning "next to the project". File contents get
+# no word splitting and no tilde expansion, so those two would otherwise become
+# a directory literally named `~` inside the repository, or a reports folder
+# committed with the project. Both are normalized here.
+os_expand_path() {
+  local p="$1" base="$2"
+  case "$p" in
+    '~')   p="$HOME" ;;
+    '~/'*) p="$HOME/${p#\~/}" ;;
+  esac
+  case "$p" in
+    /*) printf '%s\n' "$p" ;;
+    *)  printf '%s\n' "${base%/}/$p" ;;
+  esac
+}
+
+os_reports_root() {
+  if [ -n "${OPEN_STEPS_REPORTS:-}" ]; then
+    os_expand_path "$OPEN_STEPS_REPORTS" "$HOME"
+    return 0
+  fi
+
+  local repo_conf="$HOME/.claude/open-steps/reports"
+  local root="${1:-$PWD}"
+
+  if [ -n "$root" ] && [ -f "$root/.open-steps" ]; then
+    local configured
+    configured="$(sed -n 's/^[[:space:]]*reports[[:space:]]*=[[:space:]]*//p' \
+      "$root/.open-steps" 2>/dev/null | head -1)"
+    configured="${configured%\"}"; configured="${configured#\"}"
+    configured="${configured%\'}"; configured="${configured#\'}"
+    if [ -n "$configured" ]; then
+      os_expand_path "$configured" "$root"
+      return 0
+    fi
+  fi
+
+  # The old location, but only if it carries history worth keeping.
+  if [ -d "$repo_conf" ] && [ -n "$(ls -A "$repo_conf" 2>/dev/null)" ]; then
+    printf '%s\n' "$repo_conf"
+    return 0
+  fi
+
+  # XDG_DATA_HOME set to a relative path is a common mistake, and resolving it
+  # against whatever directory the hook happened to run in puts the reports
+  # inside the project and moves them whenever the agent changes directory.
+  # An absolute check keeps the promise that this path never depends on cwd.
+  case "${XDG_DATA_HOME:-$HOME/.local/share}" in
+    /*) printf '%s/open-steps/reports\n' "${XDG_DATA_HOME:-$HOME/.local/share}" ;;
+    *)  printf '%s/.local/share/open-steps/reports\n' "$HOME" ;;
+  esac
+}
+
+os_state_paths() { # sets OS_STATE_DIR, OS_REPORT_FILE, OS_STATE_FILE
+  OS_REPORTS_ROOT="$(os_reports_root "${OS_REPOS[0]:-$PWD}")"
+  OS_STATE_DIR="$OS_REPORTS_ROOT/${OS_SCOPE:-unknown}"
+  OS_REPORT_FILE="$OS_STATE_DIR/latest.md"
   OS_STATE_FILE="$OS_STATE_DIR/.stop-state"
 }
 

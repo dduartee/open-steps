@@ -38,7 +38,14 @@ These moments require a skill. Invoke it rather than improvising the answer.
 Never offer options without naming a recommendation.
 ROUTING
 
-report="$HOME/.claude/open-steps/reports/$OS_SCOPE/latest.md"
+os_state_paths
+report="$OS_REPORT_FILE"
+
+# The resolved reports folder, printed every session. A skill has to write
+# there and no skill can know the path in advance: it depends on the machine's
+# settings and on the project's own .open-steps file. Printing it here is what
+# keeps the path out of the skills themselves.
+printf '\nReports for this project live in: %s\n' "$OS_REPORTS_ROOT"
 
 if [ -r "$report" ]; then
   total="$(wc -l < "$report" | tr -d ' ')"

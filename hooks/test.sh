@@ -162,8 +162,16 @@ case "$out" in
   *) check "the handover arrives as hookSpecificOutput.additionalContext" 0 1 ;;
 esac
 [ "$(printf '%s' "$out" | wc -l | tr -d ' ')" = "0" ]; check "on one line, newlines escaped" 0 $?
-grep -q '^OS_STATE_SESSION=G11$' "$H/.claude/open-steps/reports/$(basename "$PWD")/.stop-state"
-check "the baseline is keyed on the session id Gemini sent" 0 $?
+# The state file follows the resolved reports root, which is not a fixed path:
+# OPEN_STEPS_REPORTS, then the project's .open-steps file, then the legacy
+# ~/.claude location when it holds history, then XDG. This case sets no
+# environment and creates no legacy folder, so XDG is where it lands.
+# The expected path is spelled out here rather than asked of the resolver: an
+# assertion that asks where the file went cannot fail over a change in the
+# order of the layers, which is the one thing worth failing over.
+expected_state="$H/.local/share/open-steps/reports/$(basename "$W")/.stop-state"
+grep -q '^OS_STATE_SESSION=G11$' "$expected_state" 2>/dev/null
+check "the baseline lands in the XDG folder, spelled out" 0 $?
 gafter="$(printf '{"session_id":"G11","transcript_path":"%s/t.json","cwd":"%s","hook_event_name":"AfterAgent","timestamp":"2026-01-01T00:01:00Z","prompt":"append a line","prompt_response":"Done.","stop_hook_active":false}' "$H" "$PWD")"
 out="$(printf '%s' "$gafter" | HOME="$H" GEMINI_PROJECT_DIR="$PWD" bash "$PACK/hooks/adapter.sh" gemini stop 2>/dev/null)"
 [ "$out" = "{}" ]; check "nothing landed, AfterAgent lets the turn end" 0 $?
@@ -358,6 +366,7 @@ check "the skill fits its 150-line ceiling" 0 $?
 # running this suite cannot leak in. Each case makes its own err file.
 dhome() {
   H="$(mktemp -d)"
+  err="$H/err"
   mkdir -p "$H/bin"
   # type -P, not command -v: a shell function by the same name has no path.
   for t in awk basename dirname find grep head sed tr; do
@@ -699,7 +708,11 @@ for bad in "x;touch $P/semicolon" "\$(touch $P/substitution)" "\`touch $P/backti
   start "$bad"; check "session start with a hostile id" 0 $?
   stop "$bad"; check "stop with a hostile id, nothing changed" 0 $?
 done
-state="$H/.claude/open-steps/reports/$(basename "$W")/.stop-state"
+# The resolved root, asked of the pack rather than repeated here, for the same
+# reason as the assertion in CASE 11.
+state="$(printf '{"session_id":"x"}' | HOME="$H" bash -c '
+  . "$0/hooks/fingerprint.sh"; os_find_repos; os_state_paths; printf "%s" "$OS_STATE_FILE"' \
+  "$PACK" 2>/dev/null)"
 grep -q '^OS_STATE_SESSION=nosession$' "$state"
 check "the id is replaced by the fallback" 0 $?
 printf 'OS_STATE_SESSION=x;touch %s/legacy\nOS_STATE_FIRED_AT=$(touch %s/legacy)\n' "$P" "$P" > "$state"
@@ -939,6 +952,89 @@ sound "a whole copy in the shared folder"
 said '^  ok +All [0-9]+ skills are copied into the shared skills folder, with sound headers and the folders they need\.$'
 check "and the ok line says what was looked at" 0 $?
 rm -f "$err"
+
+# --- where the reports go --------------------------------------------------
+# Every assertion below spells out the path it expects. Asking the resolver
+# where the file went is how this suite came to pass with the whole second
+# layer switched off: a test that cannot fail over the thing it claims to
+# check is decoration.
+echo "CASE 21  the reports path, one case per layer"
+H="$(mktemp -d)"; newrepo
+# resolve <expected> <label> [env assignments...]  -- runs the real resolver
+resolve() {
+  local expected="$1" label="$2"; shift 2
+  local got
+  got="$(env "$@" HOME="$H" bash -c '
+    . "$0/hooks/fingerprint.sh"; os_reports_root "$PWD"' "$PACK" 2>/dev/null)"
+  if [ "$got" = "$expected" ]; then
+    echo "  PASS  $label"; pass=$((pass + 1))
+  else
+    echo "  FAIL  $label (expected $expected, got ${got:-nothing})"
+    fail=$((fail + 1))
+  fi
+}
+# Layer 4. Nothing set, no legacy folder: XDG.
+resolve "$H/.local/share/open-steps/reports" "layer 4, nothing set, goes to XDG"
+# Layer 1 beats everything, including a legacy folder full of history.
+mkdir -p "$H/.claude/open-steps/reports/old" && : > "$H/.claude/open-steps/reports/old/latest.md"
+printf 'reports = %s/from-config\n' "$H" > .open-steps
+resolve "$H/from-env" "layer 1, OPEN_STEPS_REPORTS beats the .open-steps file" OPEN_STEPS_REPORTS="$H/from-env"
+# Layer 2 beats the legacy folder.
+resolve "$H/from-config" "layer 2, the project's .open-steps beats the legacy folder"
+# A tilde is written for a shell and file contents get no expansion.
+printf 'reports = ~/tilde-reports\n' > .open-steps
+resolve "$H/tilde-reports" "layer 2, a tilde expands instead of becoming a folder named ~"
+# A relative value is a path next to the project, made absolute.
+printf 'reports = reports\n' > .open-steps
+resolve "$W/reports" "layer 2, a relative value resolves against the repository root"
+# Quoted values keep working.
+printf 'reports = "%s/quoted"\n' "$H" > .open-steps
+resolve "$H/quoted" "layer 2, a quoted absolute value is unquoted"
+# An empty value is an unset value, and the next layer answers.
+printf 'reports =\n' > .open-steps
+resolve "$H/.claude/open-steps/reports" "layer 2, an empty reports= falls through" OPEN_STEPS_REPORTS=""
+# Layer 3 only counts with history in it.
+rm -f .open-steps
+resolve "$H/.claude/open-steps/reports" "layer 3, the legacy folder wins when it holds reports"
+rm -rf "$H/.claude/open-steps/reports"
+mkdir -p "$H/.claude/open-steps/reports"
+resolve "$H/.local/share/open-steps/reports" "layer 3 is skipped when the legacy folder is empty"
+# A relative XDG_DATA_HOME is refused rather than anchored to the cwd.
+resolve "$H/.local/share/open-steps/reports" "layer 4, a relative XDG_DATA_HOME is refused" XDG_DATA_HOME=.local/share
+resolve "$H/xdg/open-steps/reports" "layer 4, an absolute XDG_DATA_HOME is used" XDG_DATA_HOME="$H/xdg"
+# Every path is absolute, whatever the configuration said.
+all_absolute=0
+for cfg in '~' '.' 'reports' '/tmp/abs'; do
+  printf 'reports = %s\n' "$cfg" > .open-steps
+  case "$(env HOME="$H" bash -c '. "$0/hooks/fingerprint.sh"; os_reports_root "$PWD"' "$PACK" 2>/dev/null)" in
+    /*) ;;
+    *) all_absolute=1 ;;
+  esac
+done
+rm -f .open-steps
+check "every resolved path starts with a slash, whatever the config says" 0 "$all_absolute"
+# And the hooks write where the resolver said, not somewhere else.
+printf 'reports = %s/written-here\n' "$H" > .open-steps
+start S19
+[ -f "$H/written-here/$(basename "$W")/.stop-state" ]; check "the hook wrote to the configured folder" 0 $?
+# The new area needs a name. area_name has no case for it otherwise, and the
+# doctor then prints "something unnamed" and exits 2, which it documents as a
+# routing-block fault -- so one real fault is announced as another kind.
+# dhome builds the PATH the doctor runs in, exactly as the doctor cases do.
+# The variable goes through env -i directly: VAR=value in front of a function
+# call does not survive it, so the doctor would see an unset variable and judge
+# the wrong layer.
+dhome
+doctor_out="$(env -i OPEN_STEPS_REPORTS=/proc/nope/reports HOME="$H" PATH="$H/bin" "$BASH" "$PACK/doctor.sh" 2>"$err")"
+case "$doctor_out" in
+  *"something unnamed"*) check "the reports fault names its own area" 0 1 ;;
+  *) check "the reports fault names its own area" 0 0 ;;
+esac
+case "$doctor_out" in
+  *"in where the reports go"*) check "and the words are 'where the reports go'" 0 0 ;;
+  *) check "and the words are 'where the reports go'" 0 1 ;;
+esac
+rm -f .open-steps
 
 echo
 echo "passed $pass, failed $fail"

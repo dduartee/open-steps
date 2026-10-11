@@ -11,7 +11,9 @@ description: >-
   starts from it instead of re-exploring the repo.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Edit(~/.claude/open-steps/**)"
+  - "Edit(~/.local/share/open-steps/**)"
   - "Bash(gh pr view *)"
   - "Bash(gh pr checks *)"
   - "Bash(gh pr checks)"
@@ -94,11 +96,14 @@ reaching users is a surprise - a ⚠️ row.
 
 Write both, creating folders as needed. The paths are the same on every tool.
 If the file tool refuses them as outside the workspace, use the shell. Save
-nowhere else, and never in the user's project. `<project>` is the name of the
+nowhere else, and never in the user's project. The reports folder is outside
+every repository and its path is not fixed: the session startup prints it, and
+this pack's own `.open-steps` file or `OPEN_STEPS_REPORTS` decides it. Never
+assume a path; when no startup printed one, ask. `<project>` is the name of the
 folder the session started in, or of its repository's top folder when it is
 inside one (the name only, not the path):
-- `~/.claude/open-steps/reports/<project>/latest.md` (overwritten)
-- `~/.claude/open-steps/reports/<project>/history/<YYYY-MM-DD-HHMM>.md`
+- `<reports>/<project>/latest.md` (overwritten)
+- `<reports>/<project>/history/<YYYY-MM-DD-HHMM>.md`
 
 Head the file with date, project, ticket. **Two parts; only part one goes in
 the chat.** Part one - the report above, for the person. Part two - for the

@@ -13,6 +13,7 @@ description: >-
   never before. Never invents work, never deletes code.
 allowed-tools:
   - "Read(~/.claude/open-steps/**)"
+  - "Read(~/.local/share/open-steps/**)"
   - "Edit(BIG-PICTURE.md)"
   - "Bash(bash ${CLAUDE_SKILL_DIR}/scripts/census.sh *)"
   - "Bash(git rev-parse --git-dir)"
@@ -79,11 +80,11 @@ not the code. On an `ok` line, write no such note.
 
 ## Step 4 - the backlog, sourced and never invented
 
-Three sources, each item naming its own: session reports in
-`~/.claude/open-steps/reports/<project>/` (⏳ deferred rows, "Anything needed
-from you", recorded debt); Step 3 (each `unused` part, one retire candidate);
-the user, by hand. Nothing else - a gap you noticed while reading the code is
-not a task, so say it in the chat and let the user decide.
+Three sources, each item naming its own: session reports in the reports folder
+(⏳ deferred rows, "Anything needed from you", recorded debt); Step 3 (each
+`unused` part, one retire candidate); the user, by hand. Nothing else - a gap
+you noticed while reading the code is not a task, so say it in the chat and let
+the user decide.
 
 ## Step 5 - the tracker, if there is one
 
